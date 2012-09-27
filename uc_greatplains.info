@@ -1,0 +1,5 @@
+name=Ubercart GreatPlains Integration
+description=Provides serialized order data that can be used to integrate with GreatPlains accounting software
+core=6.x
+
+dependencies[] = uc_order

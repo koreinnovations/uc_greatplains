@@ -1,0 +1,108 @@
+<?php
+
+/**
+ * Implements hook_perm().
+ */
+function uc_greatplains_perm() {
+  return array(
+      'administer uc_greatplains settings',
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function uc_greatplains_menu() {
+  $items = array();
+
+  $items['admin/store/settings/uc-greatplains'] = array(
+      'title' => 'GreatPlains Settings',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('uc_greatplains_admin_settings_form'),
+      'access arguments' => array('administer uc_greatplains settings'),
+      'file' => 'includes/admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_requirements().
+ */
+function uc_greatplains_requirements($phase) {
+  $requirements = array();
+
+  // Report Drupal version
+  if ($phase == 'runtime') {
+    $requirements['uc_greatplains_path'] = array(
+        'title' => t('Great Plains'),
+    );
+
+    $path = variable_get('uc_greatplains_storage_path', '');
+    if (!empty($path)) {
+      if (file_check_directory($path, FILE_CREATE_DIRECTORY)) {
+        $requirements['uc_greatplains_path']['value'] = t('The path %path exists and is writable.', array('%path' => $path));
+        $requirements['uc_greatplains_path']['severity'] = REQUIREMENT_OK;
+      }
+      else {
+        $requirements['uc_greatplains_path']['value'] = t('The path %path does not exist or is not writable.', array('%path' => $path));
+        $requirements['uc_greatplains_path']['severity'] = REQUIREMENT_ERROR;
+      }
+    }
+    else {
+      $link = l(t('Click here to configure'), 'admin/store/settings/uc-greatplains');
+      $requirements['uc_greatplains_path']['value'] = t('Storage path not configured. !link', array('!link' => $link));
+      $requirements['uc_greatplains_path']['severity'] = REQUIREMENT_ERROR;
+    }
+  }
+
+  return $requirements;
+}
+
+/**
+ * Implements hook_order().
+ */
+function uc_greatplains_order($op, $arg1, $arg2) {
+  switch ($op) {
+    case 'submit':
+      $order = $arg1;
+      $path = variable_get('uc_greatplains_storage_path', '');
+
+      if ($path && file_check_directory($path, FILE_CREATE_DIRECTORY)) {
+
+        // Serialize order to XML include class file
+        module_load_include('php', 'uc_greatplains', 'includes/XML_Serializer/Serializer');
+
+        // create object
+        $serializer = new XML_Serializer();
+
+        // perform serialization
+        $result = $serializer->serialize($order);
+
+        // check result code and display XML if success
+        if ($result === true) {
+          $data = $serializer->getSerializedData();
+        }
+        else {
+          watchdog('uc_greatplains', 'Failed to serialize order data for !order_id', array('!order_id' => $order->order_id), WATCHDOG_ERROR);
+          return;
+        }
+
+        // Save to file
+        $filename = sprintf('%s_%d_%s.xml', date('Ymdhis'), $order->order_id, uniqid());
+
+        $dest = $path . '/' . $filename;
+        if (file_put_contents($dest, $data)) {
+          watchdog('uc_greatplains', 'Successfully stored serialized order data for order !order_id.  Filename is !filename', array('!order_id' => $order->order_id, '!filename' => $filename));
+        }
+        else {
+          watchdog('uc_greatplains', 'Failed to write serialized order data for order !order_id to !path', array('!order_id' => $order->order_id, '!path' => $dest), WATCHDOG_ERROR);
+        }
+      }
+      else {
+        watchdog('uc_greatplains', 'GreatPlains storage directory not configured or not writable', array(), WATCHDOG_ERROR);
+      }
+
+      break;
+  }
+}
